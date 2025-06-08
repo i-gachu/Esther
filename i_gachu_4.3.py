@@ -22,15 +22,20 @@ demo = True
 
 # Bot Settings
 min_payout = 80
-period = 600  
-expiration = 600
+period = 300  
+expiration = 300
 INITIAL_AMOUNT = 1
-MARTINGALE_LEVEL = 4
-MIN_ACTIVE_PAIRS = 1
+MARTINGALE_LEVEL = 3
+MIN_ACTIVE_PAIRS = 5
 PROB_THRESHOLD = 0.76
 TAKE_PROFIT = 20  # <-- Take profit target in dollars
 current_profit = 0  # <-- Current cumulative profit
 
+WATCHLIST = [
+    "GBPAUD_otc", "GBPJPY_otc", "GBPUSD_otc",
+    "AUDUSD_otc", "AUDCAD_otc", "CADCHF_otc",
+    "USDCHF_otc", "USDJPY_otc", "USDCAD_otc",
+]
 
 # Connect to Pocket Option
 api = PocketOption(ssid, demo)
@@ -43,18 +48,20 @@ def get_payout():
     try:
         d = json.loads(global_value.PayoutData)
         for pair in d:
-            # Check if it's a valid, tradable non-OTC currency pair
+            name = pair[1]
+            payout = pair[5]
             if (
-                len(pair) == 19 and
-                pair[14] == True and
-                pair[5] >= min_payout and
-                not pair[1].endswith("_otc")  # Exclude OTC pairs
+                name in WATCHLIST and
+                pair[14] and
+                name.endswith("_otc") and
+                len(name) == 10
             ):
-                p = {'payout': pair[5], 'type': pair[3]}
-                global_value.pairs[pair[1]] = p
+                if payout >= min_payout:
+                    global_value.pairs[name] = {'payout': payout, 'type': pair[3]}
+                elif name in global_value.pairs:
+                    del global_value.pairs[name]
         return True
-    except Exception as e:
-        global_value.logger(f"❌ get_payout() Error: {e}", "ERROR")
+    except:
         return False
 
 def get_df():
@@ -214,7 +221,7 @@ def wait_for_candle_start():
 
 # ✅ New timeout check function
 def near_github_timeout():
-    return (time.perf_counter() - start_counter) >= (6 * 3600 - 20 * 60)
+    return (time.perf_counter() - start_counter) >= (6 * 3600 - 14 * 60)
 
 # Strategy loop
 def strategie():
@@ -255,10 +262,11 @@ def strategie():
        
         
         if decision:
-            latest_rsi = processed_df.iloc[-1]['RSI']
-            if (decision == "call" and latest_rsi > 70) or (decision == "put" and latest_rsi < 30):
-                global_value.logger(f"Skipping {decision.upper()} due to RSI filter: RSI = {latest_rsi:.2f}", "INFO")
+            latest_k = processed_df.iloc[-1]['k_percent']
+            if (decision == "call" and latest_k > 90) or (decision == "put" and latest_k < 10):
+                global_value.logger(f"Skipping {decision.upper()} due to %K Stochastic filter: %K = {latest_k:.2f}", "INFO")
                 continue
+
 
             if near_github_timeout():
                 global_value.logger("🕒 Near GitHub timeout. Skipping new trade to avoid interruption.", "INFO")
